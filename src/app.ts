@@ -34,6 +34,8 @@ async function main() {
   // We skip the first coefficient because it's just DC offset
   // makeSliders(waveCoefficients - 1, (i, v) => (real[i + 1] = v))
 
+  real[1] = 1
+
   function tick(ms) {
     requestAnimationFrame(tick)
 
@@ -43,15 +45,15 @@ async function main() {
     for (let i = 0; i < waveCoefficients; i++) {
       const frac = i / waveCoefficients
 
-      let innerCycle = Math.sin(frac * t)
-      let outerCycle = Math.sin(frac * innerCycle)
-      imag[i] = (1 - frac) * outerCycle
+      // let innerCycle = Math.sin(frac * t)
+      // let outerCycle = Math.sin(frac * innerCycle)
+      // imag[i] = (1 - frac) * outerCycle
 
-      let c = Math.cos(t)
-      let p = Math.pow(c, Math.round((2 * t) % 3))
-      const beat = Math.sin(p * math.TAU)
-      imag[i] *= beat
-      real[i] *= beat
+      // let c = Math.cos(t)
+      // let p = Math.pow(c, Math.round((2 * t) % 3))
+      // const beat = Math.sin(p * math.TAU)
+      // imag[i] *= beat
+      // real[i] *= beat
 
       // let c = Math.cos(frac * t)
       // let p = Math.pow(c, Math.round((2 * t) % 3))
@@ -84,11 +86,12 @@ async function main() {
 
     // Tune the oscillators
     oscs.forEach((osc, i) => {
-      let y = math.normalized(mouse.y, 0, window.innerHeight)
+      let y = 1 //math.normalized(mouse.y, 0, window.innerHeight)
+      let x = 0.3 // math.normalized(mouse.x, 0, window.innerWidth)
 
       const octave = Math.floor(i / major7th.length)
       const ratio = math.arrMod(major7th, i)
-      const f = math.denormalized(math.normalized(mouse.x, 0, window.innerWidth) ** 4, 0, 10_000)
+      const f = math.denormalized(x ** 4, 0, 10_000)
       const freq = math.denormalized(y, f, f * 2 ** octave * ratio * trans)
       osc.frequency.value = freq
     })
