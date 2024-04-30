@@ -44,13 +44,13 @@ export function setupAudio() {
   analyser = context.createAnalyser()
   analyser.fftSize = fftSize
 
-  const reverb = makeReverb(1, 0.2, false)
+  const reverb = makeReverb(3, 2, false)
   const softCompressor = context.createDynamicsCompressor()
   const hardCompressor = context.createDynamicsCompressor()
   const output = context.createGain()
 
-  reverb.wet.value = 1
-  reverb.dry.value = 0.2
+  reverb.wet.value = 0
+  reverb.dry.value = 1
 
   softCompressor.attack.value = 0.05
   softCompressor.knee.value = 10
