@@ -25,9 +25,9 @@ async function init() {
   // Run the audio
   const audioAPI = main()
 
-  function tick(ms) {
+  function tick() {
     // Update the audio every frame
-    audioAPI.tick(ms)
+    audioAPI.tick(Date.now() / 1000)
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     drawSpectrum()
