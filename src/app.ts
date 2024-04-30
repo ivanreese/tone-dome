@@ -8,7 +8,7 @@ let width = window.innerWidth
 let height = window.innerHeight
 
 // Coefficients for generating the waveshape for the oscillator
-const waveCoefficients = 20
+const waveCoefficients = 4
 const real = new Float32Array(waveCoefficients)
 const imag = new Float32Array(waveCoefficients)
 
@@ -20,7 +20,7 @@ const major7th = [1, 81 / 64, 3 / 2, 16 / 9]
 // A variable to store the most recent mouse position (for testing)
 const mouse = { x: 0, y: 0 }
 
-function main() {
+async function main() {
   // Remove the interaction prompt
   document.querySelector("h1").remove()
 
@@ -47,6 +47,12 @@ function main() {
       let outerCycle = Math.sin(frac * innerCycle)
       imag[i] = (1 - frac) * outerCycle
 
+      let c = Math.cos(t)
+      let p = Math.pow(c, Math.round((2 * t) % 3))
+      const beat = Math.sin(p * math.TAU)
+      imag[i] *= beat
+      real[i] *= beat
+
       // let c = Math.cos(frac * t)
       // let p = Math.pow(c, Math.round((2 * t) % 3))
       // real[i] = Math.sin(p * math.TAU)
@@ -64,10 +70,12 @@ function main() {
     oscs.forEach((osc) => osc.setPeriodicWave(wave))
 
     // Make the oscillators a bit silly
-    // oscs.forEach((osc) => (osc.detune.value = 1000 * Math.tan(t / 10)))
+    // oscs.forEach((osc) => (osc.detune.value = 1000 * Math.tan(t / 100)))
+
+    // oscs.forEach((osc) => (osc.detune.value = mouse.x))
 
     // Calculate transposition so that we sort of smoothstep through the ratios
-    const transTime = 2
+    const transTime = 20
     const transFrac = t / transTime
     const lowT = math.arrMod(pythagoreanRatios, Math.floor(transFrac))
     const hiT = lowT == 11 ? 12 : math.arrMod(pythagoreanRatios, Math.ceil(transFrac))
@@ -76,9 +84,12 @@ function main() {
 
     // Tune the oscillators
     oscs.forEach((osc, i) => {
+      let y = math.normalized(mouse.y, 0, window.innerHeight)
+
       const octave = Math.floor(i / major7th.length)
       const ratio = math.arrMod(major7th, i)
-      const freq = 50 * 2 ** octave * ratio * trans
+      const f = math.denormalized(math.normalized(mouse.x, 0, window.innerWidth) ** 4, 0, 10_000)
+      const freq = math.denormalized(y, f, f * 2 ** octave * ratio * trans)
       osc.frequency.value = freq
     })
 
@@ -88,7 +99,14 @@ function main() {
     drawMouse()
   }
 
+  // Begin running the tick function
   requestAnimationFrame(tick)
+
+  try {
+    const wakeLock = await navigator.wakeLock.request("screen")
+  } catch (err) {
+    alert(`${err.name}, ${err.message}`)
+  }
 }
 
 // HELPERS
@@ -168,4 +186,4 @@ window.addEventListener("pointermove", (e) => {
 })
 
 // When the user clicks, initialize the audio and begin running
-window.addEventListener("pointerdown", main, { once: true })
+window.addEventListener("pointerup", main, { once: true })
