@@ -64,7 +64,7 @@ export function setupAudio() {
   hardCompressor.release.value = 0.01
   hardCompressor.threshold.value = -8
 
-  output.gain.value = 0.2
+  output.gain.value = 1
 
   // input -> reverb -> soft -> hard -> output
 

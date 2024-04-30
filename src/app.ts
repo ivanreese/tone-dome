@@ -20,10 +20,7 @@ const major7th = [1, 81 / 64, 3 / 2, 16 / 9]
 // A variable to store the most recent mouse position (for testing)
 const mouse = { x: 0, y: 0 }
 
-async function main() {
-  // Remove the interaction prompt
-  document.querySelector("h1").remove()
-
+export async function main() {
   // Set up the audio context (MUST be done in response to user input)
   audio.setupAudio()
 
@@ -45,15 +42,15 @@ async function main() {
     for (let i = 0; i < waveCoefficients; i++) {
       const frac = i / waveCoefficients
 
-      // let innerCycle = Math.sin(frac * t)
-      // let outerCycle = Math.sin(frac * innerCycle)
-      // imag[i] = (1 - frac) * outerCycle
+      let innerCycle = Math.sin(frac * t)
+      let outerCycle = Math.sin(frac * innerCycle)
+      imag[i] = (1 - frac) * outerCycle
 
-      // let c = Math.cos(t)
-      // let p = Math.pow(c, Math.round((2 * t) % 3))
-      // const beat = Math.sin(p * math.TAU)
-      // imag[i] *= beat
-      // real[i] *= beat
+      let c = Math.cos(t)
+      let p = Math.pow(c, Math.round((2 * t) % 3))
+      const beat = Math.round(Math.sin(p * math.TAU))
+      imag[i] *= beat
+      real[i] *= beat
 
       // let c = Math.cos(frac * t)
       // let p = Math.pow(c, Math.round((2 * t) % 3))
@@ -187,6 +184,3 @@ window.addEventListener("pointermove", (e) => {
   mouse.x = e.clientX
   mouse.y = e.clientY
 })
-
-// When the user clicks, initialize the audio and begin running
-window.addEventListener("pointerup", main, { once: true })

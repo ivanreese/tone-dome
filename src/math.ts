@@ -21,6 +21,9 @@ export const randInt = (min = 0, max = 1) => Math.round(rand(min, max))
 // like %, but without mirroring at 0
 export const mod = (n: number, m: number = 1) => ((n % m) + m) % m
 
+// t in the range [0,1] returns values in the range [0,1]
+export const impulse = (t: number) => 20 * t * 2000 ** -t
+
 // THESE SHOULDN'T BE HERE
 
 // return a random element of an array
