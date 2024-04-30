@@ -34,8 +34,6 @@ function main() {
   // We skip the first coefficient because it's just DC offset
   // makeSliders(waveCoefficients - 1, (i, v) => (real[i + 1] = v))
 
-  real[1] = 1
-
   function tick(ms) {
     requestAnimationFrame(tick)
 
@@ -45,9 +43,9 @@ function main() {
     for (let i = 0; i < waveCoefficients; i++) {
       const frac = i / waveCoefficients
 
-      // let innerCycle = Math.sin(frac * t)
-      // let outerCycle = Math.sin(frac * innerCycle)
-      // imag[i] = (1 - frac) * outerCycle
+      let innerCycle = Math.sin(frac * t)
+      let outerCycle = Math.sin(frac * innerCycle)
+      imag[i] = (1 - frac) * outerCycle
 
       // let c = Math.cos(frac * t)
       // let p = Math.pow(c, Math.round((2 * t) % 3))
@@ -80,11 +78,7 @@ function main() {
     oscs.forEach((osc, i) => {
       const octave = Math.floor(i / major7th.length)
       const ratio = math.arrMod(major7th, i)
-
-      let freq = 50 * 2 ** octave * ratio * trans
-
-      freq = 200
-
+      const freq = 50 * 2 ** octave * ratio * trans
       osc.frequency.value = freq
     })
 
