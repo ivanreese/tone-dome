@@ -15,6 +15,12 @@ const perOscRandoms = Array(nOscs)
 // TODO: We can modulate this more interestingly later
 const chordChangeIntervalSeconds = 10
 
+// Every so often, surge the heavy distortion
+const distortionIntervalSeconds = 79
+
+// Every so often, blorp
+const blorbIntervalSeconds = 47
+
 // This determines how tonally complex our synthesizers are
 // This needs to be at least 2 to work
 const waveCoefficients = 16
@@ -51,53 +57,60 @@ const major7Add11 = [root, maj3, fifth, 2 * maj2, 2 * fourth]
 
 const chordProgression = [majorAdd9, majorAdd11, major, major7s11, major7, major7Add11, minor, minor7]
 
-const state = {
-  chord: 0,
+export type Orientation = { x: number; y: number; z: number }
+export type POIs = { lat: number; lon: number; collected: boolean; type: number }[]
+export type AudioTick = (currentTimeInSeconds: number, orientation: Orientation, pois: POIs) => void
+export type AudioState = {
+  amplitude: number
+  chord: number
+  chorus: number
+  distortion: number
+  transposition: number
 }
-
-export type AudioAPI = {
-  tick: (currentTimeInSeconds: number) => void
-  pois: { lat: number; lon: number }[]
-  state: {
-    chord: number
-  }
-}
+export type AudioAPI = { tick: AudioTick; state: AudioState }
 
 export function main(): AudioAPI {
   // Set up the audio context (MUST be done in response to user input)
-  audio.setupAudio()
+  const fx = audio.setupAudio()
 
   // Make some oscillators
   const oscs = makeOscs(nOscs)
 
-  const pois = [
-    { lat: 1, lon: 2 },
-    { lat: 3, lon: 4 },
-  ]
+  const state: AudioState = { amplitude: 0, chord: 0, chorus: 0, distortion: 0, transposition: 0 }
 
-  function tick(ms: number) {
+  function tick(ms: number, orientation: Orientation) {
     const uniqueTime = ms / 1000
     const globalTime = Date.now() / 1000
 
     // Chord
     // This uses globalTime, so it's synced across all phones
-    state.chord = Math.round(globalTime / chordChangeIntervalSeconds) % chordProgression.length
-    const currentChord = math.arrMod(chordProgression, state.chord)
+    const chord = Math.round(globalTime / chordChangeIntervalSeconds)
+    const currentChord = math.arrMod(chordProgression, chord)
+    state.chord = (chord / chordProgression.length) % 1
 
     // Amplitude
     // This uses uniqueTime, so it's unique to each phone
     // It also uses perOscRandoms, so each osc cycles individually
     // It's a sin^20, so it's quick pulses with lots of silence in between
+    state.amplitude = 0
     oscs.forEach((osc, oscIndex) => {
       const phase = math.TAU * perOscRandoms[oscIndex] + uniqueTime
       const currentAmplitude = Math.sin(phase) ** 20
-      return setValue(osc.gain.gain, currentAmplitude / nOscs)
+      setValue(osc.gain.gain, currentAmplitude / nOscs)
+      state.amplitude += currentAmplitude / nOscs
     })
 
+    // Chorus
     // When this goes high (like 1000) it sounds chaotic and pretty
     // When it goes to near zero (like 2), it sounds organic
     // When it goes to zero, it sounds pure and a bit digital
-    const chorus = Math.max(0, Math.tan(uniqueTime / 31) ^ 5)
+    const blorpChorus = Math.max(0, Math.tan((math.TAU * uniqueTime) / blorbIntervalSeconds) ^ 5)
+    const orientationChorus = 1000 * (Math.abs(orientation.y) / 90) ** 40
+    const chorus = blorpChorus + orientationChorus
+
+    // Heavy distortion
+    const distortion = Math.sin((Math.PI * uniqueTime) / distortionIntervalSeconds) ** 80
+    setValue(fx.heavyDistortion.wet, distortion)
 
     // Update the periodic wave for each oscillator
     oscs.forEach((osc, oscIndex) => {
@@ -126,39 +139,11 @@ export function main(): AudioAPI {
       osc.node.setPeriodicWave(wave)
     })
 
-    // Modulate the coeficients to create interesting ambience
-    for (let i = 0; i < waveCoefficients; i++) {
-      const frac = i / waveCoefficients
-
-      // let innerCycle = Math.sin(frac * t)
-      // let outerCycle = Math.sin(frac * innerCycle)
-      // imag[i] = (1 - frac) * outerCycle
-
-      // let c = Math.cos(t)
-      // let p = Math.pow(c, Math.round((2 * t) % 3))
-      // const beat = Math.round(Math.sin(p * math.TAU))
-      // imag[i] *= beat
-      // real[i] *= beat
-
-      // let c = Math.cos(frac * t)
-      // let p = Math.pow(c, Math.round((2 * t) % 3))
-      // real[i] = Math.sin(p * math.TAU)
-
-      // let innerCycle = Math.asin(Math.cos(frac * t))
-      // let outerCycle = Math.acos(Math.sin(frac * innerCycle))
-      // real[i] = (1 - frac) * outerCycle
-      // real[i] = isFinite(real[i]) ? real[i] : 0
-    }
-
-    // real[1] = math.impulse((t / 1) % 2)
-
     // Make the oscillators a bit silly
-    // oscs.forEach((osc) => (osc.detune.value = 1000 * Math.tan(t / 100)))
-
-    // oscs.forEach((osc) => (osc.detune.value = mouse.x))
+    // oscs.forEach((osc) => (osc.detune.value = 1000 * Math.tan(globalTime / 100)))
 
     // Pitch warble based on time
-    // oscs.forEach((osc) => (osc.detune.value = 50 * Math.sin(t)))
+    // oscs.forEach((osc) => (osc.detune.value = 50 * Math.sin(globalTime)))
 
     // Calculate transposition so that we sort of smoothstep through the ratios
     const transTime = 30
@@ -167,19 +152,17 @@ export function main(): AudioAPI {
     const hiT = lowT == 11 ? 12 : math.arrMod(chromatic, Math.ceil(transFrac))
     const curvedT = math.denormalized(transFrac % 1, -1, 1) ** 19
     const trans = math.renormalized(curvedT, -1, 1, lowT, hiT)
+    state.transposition = curvedT
 
     // Tune the oscillators
     oscs.forEach((osc, i) => {
-      let y = 1 //math.normalized(mouse.y, 0, window.innerHeight)
-      let x = 0.3 // math.normalized(mouse.x, 0, window.innerWidth)
-
       const f = 130.813
       const freq = f * getNoteInScale(currentChord, i) * trans
       setValue(osc.node.frequency, freq + math.rand(-chorus, chorus))
     })
   }
 
-  return { tick, pois, state }
+  return { tick, state }
 }
 
 // HELPERS

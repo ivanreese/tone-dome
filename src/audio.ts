@@ -1,6 +1,6 @@
 import * as math from "./math"
 
-const fftSize = 32768 / 4
+const fftSize = 32768 / 32
 
 export let context: AudioContext
 export let sampleRate: number
@@ -17,14 +17,18 @@ export function setupAudio() {
   analyser = context.createAnalyser()
   analyser.fftSize = fftSize
 
-  const distortion = makeDistortion(5)
+  const lightDistortion = makeDistortion(5)
+  const heavyDistortion = makeDistortion(50)
   const reverb = makeReverb(1, 1, false)
   const softCompressor = context.createDynamicsCompressor()
   const hardCompressor = context.createDynamicsCompressor()
   const output = context.createGain()
 
-  distortion.wet.value = 0.2
-  distortion.dry.value = 1
+  lightDistortion.wet.value = 0.5
+  lightDistortion.dry.value = 1
+
+  heavyDistortion.wet.value = 0
+  heavyDistortion.dry.value = 1
 
   reverb.wet.value = 1
   reverb.dry.value = 0.2
@@ -41,14 +45,17 @@ export function setupAudio() {
   hardCompressor.release.value = 0.01
   hardCompressor.threshold.value = -8
 
-  output.gain.value = 1
+  output.gain.value = 0.1
 
-  // input -> reverb -> soft -> hard -> output
+  // input -> heavy -> reverb -> light -> soft -> hard -> output
 
-  input.connect(distortion.input)
-  distortion.output.connect(reverb.input)
-  reverb.output.connect(softCompressor).connect(hardCompressor).connect(output)
+  input.connect(heavyDistortion.input)
+  heavyDistortion.output.connect(reverb.input)
+  reverb.output.connect(lightDistortion.input)
+  lightDistortion.output.connect(softCompressor).connect(hardCompressor).connect(output)
   output.connect(analyser).connect(context.destination)
+
+  return { lightDistortion, heavyDistortion, reverb, softCompressor, hardCompressor }
 }
 
 function makeReverb(seconds: number, decay: number, reverse: boolean) {
