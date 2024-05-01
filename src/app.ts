@@ -61,13 +61,16 @@ export type Orientation = { x: number; y: number; z: number }
 export type POIs = { lat: number; lon: number; collected: boolean; type: number }[]
 export type AudioTick = (currentTimeInSeconds: number, orientation: Orientation, pois: POIs) => void
 export type AudioState = {
-  amplitude: number
-  chord: number
-  chorus: number
-  distortion: number
-  transposition: number
+  amplitude: number // unknown range (TODO)
+  chord: number // 0 to 1
+  chorus: number // unknown range (TODO)
+  distortion: number // unknown range (TODO)
+  transposition: number // -1 to 1, mostly hovers around 0
 }
-export type AudioAPI = { tick: AudioTick; state: AudioState }
+export type AudioAPI = {
+  tick: AudioTick
+  state: AudioState
+}
 
 export function main(): AudioAPI {
   // Set up the audio context (MUST be done in response to user input)
@@ -107,10 +110,12 @@ export function main(): AudioAPI {
     const blorpChorus = Math.max(0, Math.tan((math.TAU * uniqueTime) / blorbIntervalSeconds) ^ 5)
     const orientationChorus = 1000 * (Math.abs(orientation.y) / 90) ** 40
     const chorus = blorpChorus + orientationChorus
+    state.chorus = chorus
 
     // Heavy distortion
     const distortion = Math.sin((Math.PI * uniqueTime) / distortionIntervalSeconds) ** 80
     setValue(fx.heavyDistortion.wet, distortion)
+    state.distortion = distortion
 
     // Update the periodic wave for each oscillator
     oscs.forEach((osc, oscIndex) => {
