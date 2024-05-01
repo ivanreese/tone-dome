@@ -19,19 +19,22 @@ async function init() {
   try {
     const wakeLock = await navigator.wakeLock.request("screen")
   } catch (err) {
-    alert(`${err.name}, ${err.message}`)
+    // alert(`${err.name}, ${err.message}`)
   }
 
   // Run the audio
   const audioAPI = main()
 
-  function tick() {
+  function tick(ms: number) {
     // Update the audio every frame
-    audioAPI.tick(Date.now() / 1000)
+    audioAPI.tick(ms)
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     drawSpectrum()
-    drawMouse()
+    // drawMouse()
+
+    // ctx.fillStyle = "#fff"
+    // ctx.fillText(`Chord: ${audioAPI.state.chord}`, window.innerWidth / 2, 20)
 
     requestAnimationFrame(tick)
   }
@@ -43,18 +46,15 @@ function drawSpectrum() {
   const binData = new Uint8Array(nBins)
   audio.analyser.getByteFrequencyData(binData)
 
-  ctx.beginPath()
-  ctx.lineWidth = 1
-  ctx.strokeStyle = "#fff"
-  ctx.moveTo(0, window.innerHeight)
+  ctx.fillStyle = "#fff"
   for (let i = 0; i < nBins; i++) {
     let frac = i / nBins
     frac **= 0.25 // This biases the spectrum so that low frequencies are wider, which more closely matches how we perceive pitch
-    const x = math.denormalized(frac, 0, window.innerWidth)
-    const y = math.renormalized(binData[i], 0, 256, window.innerHeight, 0)
-    ctx.lineTo(x, y)
+    const x = frac * window.innerWidth
+    const y = (1 - binData[i] / 256) * window.innerHeight
+    let scale = (1 - frac) ** 4 + 0.2
+    ctx.fillRect(x - 2 * scale, y - 4 * scale, 4 * scale, 8 * scale)
   }
-  ctx.stroke()
 }
 
 function drawMouse() {

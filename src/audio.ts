@@ -1,6 +1,6 @@
 import * as math from "./math"
 
-const fftSize = 16384
+const fftSize = 32768 / 4
 
 export let context: AudioContext
 export let sampleRate: number
@@ -17,13 +17,13 @@ export function setupAudio() {
   analyser = context.createAnalyser()
   analyser.fftSize = fftSize
 
-  const distortion = makeDistortion(10)
-  const reverb = makeReverb(3, 1, true)
+  const distortion = makeDistortion(5)
+  const reverb = makeReverb(1, 1, false)
   const softCompressor = context.createDynamicsCompressor()
   const hardCompressor = context.createDynamicsCompressor()
   const output = context.createGain()
 
-  distortion.wet.value = 0.1
+  distortion.wet.value = 0.2
   distortion.dry.value = 1
 
   reverb.wet.value = 1
