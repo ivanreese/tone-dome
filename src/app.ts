@@ -16,7 +16,7 @@ const perOscRandoms = Array(nOscs)
 const chordChangeIntervalSeconds = 10
 
 // Every so often, surge the heavy distortion
-const distortionIntervalSeconds = 79
+const distortionIntervalSeconds = 149
 
 // Every so often, blorp
 const blorbIntervalSeconds = 47
@@ -27,9 +27,7 @@ const waveCoefficients = 16
 
 // The high coefficients are noisy and gross, so we limit their intensity fairly low
 const maxHighCoefIntensity = 0.1
-
-let real = new Float32Array(waveCoefficients)
-let imag = new Float32Array(waveCoefficients)
+const coefCycleSeconds = 13
 
 const root = 1
 const min2 = 256 / 243
@@ -59,7 +57,7 @@ const chordProgression = [majorAdd9, majorAdd11, major, major7s11, major7, major
 
 export type Orientation = { x: number; y: number; z: number }
 export type POIs = { lat: number; lon: number; collected: boolean; type: number }[]
-export type AudioTick = (currentTimeInSeconds: number, orientation: Orientation, pois: POIs) => void
+export type AudioTick = (msFromRequestAnimationFrame: number, orientation: Orientation, pois: POIs) => void
 export type AudioState = {
   amplitude: number // unknown range (TODO)
   chord: number // 0 to 1
@@ -72,9 +70,9 @@ export type AudioAPI = {
   state: AudioState
 }
 
-export function main(): AudioAPI {
+export function main(runAnalysis = false): AudioAPI {
   // Set up the audio context (MUST be done in response to user input)
-  const fx = audio.setupAudio()
+  const fx = audio.setupAudio(runAnalysis)
 
   // Make some oscillators
   const oscs = makeOscs(nOscs)
@@ -96,11 +94,21 @@ export function main(): AudioAPI {
     // It also uses perOscRandoms, so each osc cycles individually
     // It's a sin^20, so it's quick pulses with lots of silence in between
     state.amplitude = 0
+
     oscs.forEach((osc, oscIndex) => {
-      const phase = math.TAU * perOscRandoms[oscIndex] + uniqueTime
+      const phase = math.TAU * perOscRandoms[oscIndex] + uniqueTime // TODO: This might be worth exploring / exposing
       const currentAmplitude = Math.sin(phase) ** 20
-      setValue(osc.gain.gain, currentAmplitude / nOscs)
+      osc.amp = currentAmplitude / nOscs
       state.amplitude += currentAmplitude / nOscs
+
+      // The high coefficients surge, driven by uniqueTime and the oscillator index, every coefCycleSeconds
+      const oscCoefCycleSeconds = math.rand(0.5, 2) // The speed we cycle coefs in each osc is random on each phone
+      const cyclePhase = (Math.PI * uniqueTime) / coefCycleSeconds + (oscCoefCycleSeconds * oscIndex) / nOscs
+      const lowCoefIntensity = 1
+      const highCoefIntensity = maxHighCoefIntensity * Math.cos(cyclePhase) ** 20
+
+      setValue(osc.gainLow.gain, osc.amp)
+      setValue(osc.gainHigh.gain, osc.amp * highCoefIntensity)
     })
 
     // Chorus
@@ -108,7 +116,7 @@ export function main(): AudioAPI {
     // When it goes to near zero (like 2), it sounds organic
     // When it goes to zero, it sounds pure and a bit digital
     const blorpChorus = Math.max(0, Math.tan((math.TAU * uniqueTime) / blorbIntervalSeconds) ^ 5)
-    const orientationChorus = 1000 * (Math.abs(orientation.y) / 90) ** 40
+    const orientationChorus = 300 * (Math.abs(orientation.y) / 90) ** 30
     const chorus = blorpChorus + orientationChorus
     state.chorus = chorus
 
@@ -116,33 +124,6 @@ export function main(): AudioAPI {
     const distortion = Math.sin((Math.PI * uniqueTime) / distortionIntervalSeconds) ** 80
     setValue(fx.heavyDistortion.wet, distortion)
     state.distortion = distortion
-
-    // Update the periodic wave for each oscillator
-    oscs.forEach((osc, oscIndex) => {
-      // The high coefficients surge, driven by uniqueTime and the oscillator index, every coefCycleSeconds
-      const coefCycleSeconds = 13
-      const oscCoefCycleSeconds = math.rand(0.5, 2) // The speed we cycle coefs in each osc is random on each phone
-      const cyclePhase = (Math.PI * uniqueTime) / coefCycleSeconds + (oscCoefCycleSeconds * oscIndex) / nOscs
-      const lowCoefIntensity = 1
-      const highCoefIntensity = maxHighCoefIntensity * Math.cos(cyclePhase) ** 20
-
-      // Calculate the coefficients for this oscillator's wave
-      real = real.map((_, coef) => {
-        // We want to ignore the 0th coefficient since that's just DC offset
-        if (coef == 0) return 0
-
-        // Calculate frac having skipped the 0th coefficient
-        let frac = (coef - 1) / (waveCoefficients - 1)
-
-        frac **= 0.0001
-
-        return math.denormalized(frac, lowCoefIntensity, highCoefIntensity)
-      })
-
-      // Generate and apply a wave based on the current coefficients
-      const wave = audio.context.createPeriodicWave(real, imag, { disableNormalization: true })
-      osc.node.setPeriodicWave(wave)
-    })
 
     // Make the oscillators a bit silly
     // oscs.forEach((osc) => (osc.detune.value = 1000 * Math.tan(globalTime / 100)))
@@ -163,7 +144,8 @@ export function main(): AudioAPI {
     oscs.forEach((osc, i) => {
       const f = 130.813
       const freq = f * getNoteInScale(currentChord, i) * trans
-      setValue(osc.node.frequency, freq + math.rand(-chorus, chorus))
+      setValue(osc.nodeLow.frequency, freq + math.rand(-chorus, chorus))
+      setValue(osc.nodeHigh.frequency, freq + math.rand(-chorus, chorus))
     })
   }
 
@@ -185,11 +167,32 @@ function setValue(param: AudioParam, value: number) {
 
 function makeOscs(count) {
   return new Array(count).fill(null).map((v, i) => {
-    const node = new OscillatorNode(audio.context)
-    const gain = new GainNode(audio.context, { gain: 1 / count })
-    node.connect(gain)
-    gain.connect(audio.input)
-    node.start()
-    return { node, gain }
+    const nodeLow = new OscillatorNode(audio.context)
+    const nodeHigh = new OscillatorNode(audio.context)
+
+    let real = new Float32Array(waveCoefficients)
+    let imag = new Float32Array(waveCoefficients)
+
+    real = real.map((_, coef) => {
+      if (coef == 0) return 0
+      let frac = (coef - 1) / (waveCoefficients - 1)
+      frac **= 0.0001
+      return math.denormalized(frac, 1, 0)
+    })
+    nodeLow.setPeriodicWave(audio.context.createPeriodicWave(real, imag, { disableNormalization: true }))
+
+    real = real.map((_, coef) => (coef == 0 ? 0 : 1))
+    nodeHigh.setPeriodicWave(audio.context.createPeriodicWave(real, imag, { disableNormalization: true }))
+
+    const gainLow = new GainNode(audio.context)
+    const gainHigh = new GainNode(audio.context)
+
+    nodeLow.connect(gainLow).connect(audio.input)
+    nodeHigh.connect(gainHigh).connect(audio.input)
+
+    nodeLow.start()
+    nodeHigh.start()
+
+    return { nodeLow, nodeHigh, gainLow, gainHigh, amp: 0 }
   })
 }

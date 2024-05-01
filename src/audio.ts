@@ -8,14 +8,16 @@ export let sampleRate: number
 export let input: GainNode
 export let analyser: AnalyserNode
 
-export function setupAudio() {
+export function setupAudio(runAnalysis: boolean) {
   context = new window.AudioContext()
   sampleRate = context.sampleRate
 
   input = new GainNode(context, { gain: 1 })
 
-  analyser = context.createAnalyser()
-  analyser.fftSize = fftSize
+  if (runAnalysis) {
+    analyser = context.createAnalyser()
+    analyser.fftSize = fftSize
+  }
 
   const lightDistortion = makeDistortion(5)
   const heavyDistortion = makeDistortion(50)
@@ -45,7 +47,7 @@ export function setupAudio() {
   hardCompressor.release.value = 0.01
   hardCompressor.threshold.value = -8
 
-  output.gain.value = 0.1
+  output.gain.value = 0.2
 
   // input -> heavy -> reverb -> light -> soft -> hard -> output
 
@@ -53,7 +55,10 @@ export function setupAudio() {
   heavyDistortion.output.connect(reverb.input)
   reverb.output.connect(lightDistortion.input)
   lightDistortion.output.connect(softCompressor).connect(hardCompressor).connect(output)
-  output.connect(analyser).connect(context.destination)
+  output.connect(context.destination)
+  if (runAnalysis) {
+    output.connect(analyser)
+  }
 
   return { lightDistortion, heavyDistortion, reverb, softCompressor, hardCompressor }
 }

@@ -2,6 +2,8 @@ import { main, AudioState } from "./app"
 import * as audio from "./audio"
 import * as math from "./math"
 
+const runAnalysis = true
+
 // Globals for canvas rendering
 const canvas = document.querySelector("canvas")
 const ctx = canvas.getContext("2d")
@@ -25,18 +27,19 @@ async function init() {
   } catch {}
 
   // Run the audio
-  const audioAPI = main()
+  const audioAPI = main(runAnalysis)
 
   function tick(ms: number) {
     // Update the audio every frame
     audioAPI.tick(ms, orientation, [])
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    drawSpectrum(audioAPI.state)
-    // drawMouse()
-
-    ctx.fillStyle = "#fff"
-    ctx.fillText(`Orient: ${orientation.y}`, window.innerWidth / 2, 20)
+    if (runAnalysis) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      drawSpectrum(audioAPI.state)
+      // drawMouse()
+      ctx.fillStyle = "#fff"
+      ctx.fillText(`Orient: ${orientation.y}`, window.innerWidth / 2, 20)
+    }
 
     requestAnimationFrame(tick)
   }
@@ -54,7 +57,7 @@ function drawSpectrum(state: AudioState) {
     frac **= 0.5 // This biases the spectrum so that low frequencies are wider, which more closely matches how we perceive pitch
     const x = frac * window.innerWidth
     const y = (1 - binData[i] / 256) * window.innerHeight
-    let scale = (30 * state.distortion + (1 - frac) ** 2 + 0.2) * math.denormalized(state.amplitude, 0.5, 2)
+    let scale = (10 * state.distortion + (1 - frac) ** 2 + 0.2) * math.denormalized(state.amplitude, 0.5, 2)
     ctx.fillRect(x - 2 * scale, y - 4 * scale, 4 * scale, 8 * scale)
   }
 }
