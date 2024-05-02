@@ -48,7 +48,7 @@ export function setupAudio(runAnalysis: boolean) {
   hardCompressor.release.value = 0.01
   hardCompressor.threshold.value = -8
 
-  output.gain.value = 0.5
+  output.gain.value = 1
 
   // input -> heavy -> reverb -> light -> soft -> hard -> output
 

@@ -28,13 +28,17 @@ const transpositionIntervalSeconds = 37 // Global
 
 // Continually bend the pitch up and down a little
 const detuneCycleSeconds = 7 // Global
-const detuneIntensity = 35
+const detuneIntensity = 3000
+const detuneDuration = 10
 
 // Every so often, surge the heavy distortion
 const distortionIntervalSeconds = 129 // Unique
+const distortionDuration = 12
 
 // Every so often, blorp
 const blorpIntervalSeconds = 47 // Unique
+const blorpDuration = 2
+const blorpIntensity = 1000
 
 // We treat C as our root frequency
 const rootFrequency = 130.813
@@ -69,12 +73,12 @@ const chordProgression = [major7Add11, minor, minor7, majorAdd9, majorAdd11, maj
 export type AudioTick = (msFromRequestAnimationFrame: number, inputs: AudioInputs) => void
 export type AudioInputs = {
   orientation: { x: number; y: number; z: number }
-  oscillators: [number, number, number, number, number, number, number, number, number, number, number, number] // Set these between 0 and 1 to control the volume of each oscillator's main sound
-  flickers: [number, number, number, number, number, number, number, number, number, number, number, number] // Set these between 0 and 1 to control the volume of each oscillator's flicker sound
+  oscillators: number[] // Set these between 0 and 1 to control the volume of each oscillator's main sound
+  flickers: number[] // Set these between 0 and 1 to control the volume of each oscillator's flicker sound
   effects: {
-    blorpAtMs: number // Set this to the current msFromRequestAnimationFrame whenever I should run a blorp.
-    doDetune: number // Set this to 1 to make the detune effect active
-    doDistortion: number // Set this to 1 to make the distortion effect active
+    blorpAtMs: number // Set this to the current msFromRequestAnimationFrame when you want a blorp.
+    detuneAtMs: number // Set this to the current msFromRequestAnimationFrame when you want a wobble of detune.
+    distortAtMs: number // Set this to the current msFromRequestAnimationFrame when you want a surge of distortion.
     doExtraBass: number // Set this to 1 to play an extra bassline
     doExtraMelody: number // Set this to 1 to play an extra melody
     doExtraNotes: number // Set this to 1 to play extra notes
@@ -140,12 +144,16 @@ export function main(runAnalysis = false): AudioAPI {
     // When it goes to near zero (like 2), it sounds organic
     // When it goes to zero, it sounds pure and a bit digital
     // const chorus = Math.max(0, Math.tan((Math.PI * uniqueTime) / blorpIntervalSeconds) ^ 5) // Bitwise happy accident
-    const chorus = math.impulse((ms - inputs.effects.blorpAtMs) / 1000)
+    const chorusTime = (ms - inputs.effects.blorpAtMs) / 1000
+    const chorus = math.impulse(chorusTime / blorpDuration) ** 0.2
     state.chorus = chorus
 
     // Detune
-    const detune = inputs.effects.doDetune * detuneIntensity * Math.sin((math.TAU * globalTime) / detuneCycleSeconds)
-    state.detune = math.renormalized(detune, -detuneIntensity, detuneIntensity, 0, 1)
+    // const detune = detuneIntensity * Math.sin((math.TAU * globalTime) / detuneCycleSeconds)
+    const detuneTime = (ms - inputs.effects.detuneAtMs) / 1000
+    const detune =
+      math.impulse((10 * detuneTime) / detuneDuration) - math.impulse((4 * detuneTime) / detuneDuration) + math.impulse((2 * detuneTime) / detuneDuration) - math.impulse(detuneTime / detuneDuration)
+    state.detune = Math.abs(detune)
 
     // Active
     const oscActiveSin = Math.sin((math.TAU * globalTime) / oscActiveCycleSeconds)
@@ -153,7 +161,14 @@ export function main(runAnalysis = false): AudioAPI {
     state.active = math.renormalized(oscActiveSin, -1, 1, 0, 1)
 
     // Heavy distortion
-    const distortion = inputs.effects.doDistortion * Math.sin((Math.PI * uniqueTime) / distortionIntervalSeconds) ** 80
+    // const distortionSurge = Math.sin((Math.PI * uniqueTime) / distortionIntervalSeconds) ** 80
+    const distortionTime = (ms - inputs.effects.distortAtMs) / 1000
+    const distortionEvent =
+      1.5 * math.impulse(distortionTime / (distortionDuration * 0.15)) -
+      math.impulse(distortionTime / (distortionDuration * 0.4)) -
+      math.impulse(distortionTime / (distortionDuration * 0.7)) +
+      1.5 * math.impulse(distortionTime / distortionDuration)
+    const distortion = math.clip(Math.abs(distortionEvent))
     setValue(fx.heavyDistortion.wet, distortion)
     setValue(fx.heavyDistortion.dry, 1 - distortion)
     state.distortion = distortion
@@ -165,13 +180,13 @@ export function main(runAnalysis = false): AudioAPI {
     // Oscillators
     oscs.forEach((osc, oscIndex) => {
       // Frequency
-      const freq = transRootFreq * getNoteInScale(currentChord, oscIndex) + math.rand(-chorus * 1000, chorus * 1000)
+      const freq = transRootFreq * getNoteInScale(currentChord, oscIndex) + math.rand(-chorus * blorpIntensity, chorus * blorpIntensity)
       setValue(osc.nodeLow.frequency, freq)
       setValue(osc.nodeHigh.frequency, freq)
 
       // Detune
-      setValue(osc.nodeLow.detune, detune)
-      setValue(osc.nodeHigh.detune, detune)
+      setValue(osc.nodeLow.detune, detune * detuneIntensity)
+      setValue(osc.nodeHigh.detune, detune * -detuneIntensity)
 
       // Active
       const activeAmplitude = math.clip(oscActiveCount - oscIndex)
@@ -181,7 +196,9 @@ export function main(runAnalysis = false): AudioAPI {
       const amplitudeActiveModulated = activeAmplitude * Math.sin(amplitudePhase) ** 20
       const amplitudeDomeMode = inputs.effects.doExtraNotes * math.impulse(amplitudePhase % 4)
       const amplitudeChorus = 0.5 * chorus
-      const amplitude = Math.min(1, amplitudeActiveModulated + amplitudeDomeMode + amplitudeChorus)
+      const amplitudeDetune = 0.4 * Math.abs(detune)
+      const amplitudeDistort = 0.1 * distortion
+      const amplitude = Math.min(1, amplitudeActiveModulated + amplitudeDomeMode + amplitudeChorus + amplitudeDetune + amplitudeDistort)
       const scaledAmplitude = amplitude / oscCount
       state.oscillators[oscIndex].amplitude = amplitude
       state.amplitude += scaledAmplitude
@@ -189,7 +206,9 @@ export function main(runAnalysis = false): AudioAPI {
       // Coefficients
       const coefPhaseFlicker = math.rand(0.5, 2)
       const coefPhase = (Math.PI * uniqueTime) / coefSurgeIntervalSeconds + (coefPhaseFlicker * oscIndex) / oscCount
-      const coefIntensity = Math.cos(coefPhase) ** 20
+      const coefCycling = Math.cos(coefPhase) ** 20
+      const coefDistort = 0.5 * distortion
+      const coefIntensity = Math.min(1, coefCycling + coefDistort)
       const scaledCoefIntensity = coefIntensity * coefMaxIntensity
       state.oscillators[oscIndex].flicker = amplitude * coefIntensity
       state.flicker += (amplitude * coefIntensity) / oscCount
