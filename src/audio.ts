@@ -13,7 +13,7 @@ export function setupAudio(runAnalysis: boolean) {
   sampleRate = context.sampleRate
 
   input = new GainNode(context, { gain: 0 })
-  input.gain.linearRampToValueAtTime(1, context.currentTime + 10)
+  input.gain.linearRampToValueAtTime(1, context.currentTime + 1)
 
   if (runAnalysis) {
     analyser = context.createAnalyser()

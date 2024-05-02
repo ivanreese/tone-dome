@@ -28,13 +28,13 @@ const transpositionIntervalSeconds = 37 // Global
 
 // Continually bend the pitch up and down a little
 const detuneCycleSeconds = 7 // Global
-const detuneIntensity = 25
+const detuneIntensity = 35
 
 // Every so often, surge the heavy distortion
 const distortionIntervalSeconds = 129 // Unique
 
 // Every so often, blorp
-const blorbIntervalSeconds = 47 // Unique
+const blorpIntervalSeconds = 47 // Unique
 
 // We treat C as our root frequency
 const rootFrequency = 130.813
@@ -64,25 +64,37 @@ const majorAdd9 = [root, maj3, fifth, 2 * maj2]
 const majorAdd11 = [root, maj3, fifth, 2 * fourth]
 const major7Add11 = [root, maj3, fifth, 2 * maj2, 2 * fourth]
 
-const chordProgression = [majorAdd9, majorAdd11, major, major7s11, major7, major7Add11, minor, minor7]
+const chordProgression = [major7Add11, minor, minor7, majorAdd9, majorAdd11, major, major7s11, major7]
 
-export type AudioTick = (msFromRequestAnimationFrame: number, orientation: Orientation, pois: POIs) => void
-export type Orientation = { x: number; y: number; z: number }
-export type POIs = {
-  lat: number
-  lon: number
-  collected: boolean // Has this POI been collected?
-  type: number // What type of POI is this? (treat it like an enum — 0 is one type, 1 is another, etc. Maybe 4 or 5 total?)
-  distance: number // How far away is the POI?
-  direction: number // Which way is the POI relative to the phone? 0 for straight ahead, -90 for to the left, 90 for to the right, maybe?
-}[]
+export type AudioTick = (msFromRequestAnimationFrame: number, inputs: AudioInputs) => void
+export type AudioInputs = {
+  orientation: { x: number; y: number; z: number }
+  pois: Array<{
+    lat: number
+    lon: number
+    collected: boolean // Has this POI been collected?
+    type: number // What type of POI is this? (treat it like an enum — 0 is one type, 1 is another, etc. Maybe 4 or 5 total?)
+    distance: number // How far away is the POI?
+    direction: number // Which way is the POI relative to the phone? 0 for straight ahead, -90 for to the left, 90 for to the right, maybe?
+  }>
+  effects: {
+    blorpAtMs: number // Set this to the current msFromRequestAnimationFrame whenever I should run a blorp.
+    maxActive: number // Set this to whatever number of oscillators should be active (recommend between 4 and 12)
+    maxChords: number // Set this to whatever number of chords the system is allowed to cycle through (recommend between 1 and 8)
+    doDetune: number // Set this to 1 to make the detune effect active
+    doDomeMode: number // Set this to 1 to play extra notes
+    doDistortion: number // Set this to 1 to make the distortion effect active
+    doFlicker: number // Set this to 1 to make the flicker effect active
+    doTransposition: number // Set this to 1 to make the transposition effect active
+  }
+}
 
 // This is all the stuff you can use to generate dynamic visuals that match the audio
 export type AudioState = {
   active: number ///////// 0 to 1 • what fraction of the oscillators are allowed to make sound
   amplitude: number ////// 0 to 1 • overall loudness of the audio (pre-reverb, so doesn't match exactly)
   chord: number ////////// 0 to 1 • changes every time the chord changes, in a stairstep pattern (once every ~10 seconds)
-  chorus: number ///////// 0 to ∞ • surges up toward infinity whenever a "blorp" happens (once every ~minute)
+  chorus: number ///////// 0 to 1 • surges up toward infinity whenever a "blorp" happens
   detune: number ///////// 0 to 1 • the pitch continually drifts up and down
   distortion: number ///// 0 to 1 • surges when the sound gets heavily fuzzed out (once every ~2 minutes)
   flicker: number //////// 0 to 1 • overall amount of flickering high-frequency sound in this oscillator
@@ -105,20 +117,19 @@ export function main(runAnalysis = false): AudioAPI {
 
   // Make some oscillators
   const oscs = makeOscs(oscCount)
-  // const col = makeCollectable()
-  const col = null
+  const col = makeCollectable()
 
   const stateOscillators = Array.from({ length: oscCount }, () => ({ amplitude: 0, flicker: 0 }))
-  // const statePois = [{ amplitude: 0, note: 0 }]
-  const statePois = []
+  const statePois = [{ amplitude: 0, note: 0 }]
+
   const state: AudioState = { active: 0, amplitude: 0, chord: 0, chorus: 0, detune: 0, distortion: 0, flicker: 0, transposition: 0, oscillators: stateOscillators, pois: statePois }
 
-  function tick(ms: number, orientation: Orientation, pois: POIs) {
+  function tick(ms: number, inputs: AudioInputs) {
     const uniqueTime = ms / 1000
     const globalTime = Date.now() / 1000
 
     // Transposition
-    const transFrac = globalTime / transpositionIntervalSeconds
+    const transFrac = (inputs.effects.doTransposition * globalTime) / transpositionIntervalSeconds
     const lowT = math.arrMod(chromatic, Math.floor(transFrac))
     const hiT = lowT == 11 ? 12 : math.arrMod(chromatic, Math.ceil(transFrac))
     const curvedT = math.denormalized(transFrac % 1, -1, 1) ** 13
@@ -128,29 +139,30 @@ export function main(runAnalysis = false): AudioAPI {
 
     // Chord
     const chord = Math.round(globalTime / chordChangeIntervalSeconds)
-    const currentChord = math.arrMod(chordProgression, chord)
-    state.chord = (chord / chordProgression.length) % 1
+    const chordIndex = chord % Math.min(chordProgression.length, inputs.effects.maxChords)
+    const currentChord = chordProgression[chordIndex]
+    state.chord = chordIndex / chordProgression.length
 
     // Chorus
     // When this goes high (like 1000) it sounds chaotic and pretty
     // When it goes to near zero (like 2), it sounds organic
     // When it goes to zero, it sounds pure and a bit digital
-    const blorpChorus = Math.max(0, Math.tan((Math.PI * uniqueTime) / blorbIntervalSeconds) ^ 5) // Bitwise happy accident
-    const orientationChorus = 300 * (Math.abs(orientation.y) / 90) ** 30
-    const chorus = blorpChorus + orientationChorus
-    state.chorus = chorus / 100
+    // const chorus = Math.max(0, Math.tan((Math.PI * uniqueTime) / blorpIntervalSeconds) ^ 5) // Bitwise happy accident
+    const chorus = math.impulse((ms - inputs.effects.blorpAtMs) / 1000)
+    state.chorus = chorus
 
     // Detune
-    const detune = detuneIntensity * Math.sin((math.TAU * globalTime) / detuneCycleSeconds)
+    const detune = inputs.effects.doDetune * detuneIntensity * Math.sin((math.TAU * globalTime) / detuneCycleSeconds)
     state.detune = math.renormalized(detune, -detuneIntensity, detuneIntensity, 0, 1)
 
     // Active
     const oscActiveSin = Math.sin((math.TAU * globalTime) / oscActiveCycleSeconds)
-    const oscActiveCount = math.renormalized(oscActiveSin, -1, 1, oscMinActive, oscCount)
+    const oscActiveCountCycling = math.renormalized(oscActiveSin, -1, 1, oscMinActive, oscCount)
+    const oscActiveCount = Math.min(inputs.effects.maxActive, oscActiveCountCycling)
     state.active = math.renormalized(oscActiveSin, -1, 1, 0, 1)
 
     // Heavy distortion
-    const distortion = Math.sin((Math.PI * uniqueTime) / distortionIntervalSeconds) ** 80
+    const distortion = inputs.effects.doDistortion * Math.sin((Math.PI * uniqueTime) / distortionIntervalSeconds) ** 80
     setValue(fx.heavyDistortion.wet, distortion)
     setValue(fx.heavyDistortion.dry, 1 - distortion)
     state.distortion = distortion
@@ -162,7 +174,7 @@ export function main(runAnalysis = false): AudioAPI {
     // Oscillators
     oscs.forEach((osc, oscIndex) => {
       // Frequency
-      const freq = transRootFreq * getNoteInScale(currentChord, oscIndex) + math.rand(-chorus, chorus)
+      const freq = transRootFreq * getNoteInScale(currentChord, oscIndex) + math.rand(-chorus * 1000, chorus * 1000)
       setValue(osc.nodeLow.frequency, freq)
       setValue(osc.nodeHigh.frequency, freq)
 
@@ -175,7 +187,10 @@ export function main(runAnalysis = false): AudioAPI {
 
       // Amplitude
       const amplitudePhase = Math.PI * osc.rand + uniqueTime
-      const amplitude = activeAmplitude * Math.sin(amplitudePhase) ** 20
+      const amplitudeActiveModulated = activeAmplitude * Math.sin(amplitudePhase) ** 20
+      const amplitudeDomeMode = inputs.effects.doDomeMode * math.impulse(amplitudePhase % 4)
+      const amplitudeChorus = 0.5 * chorus
+      const amplitude = Math.min(1, amplitudeActiveModulated + amplitudeDomeMode + amplitudeChorus)
       const scaledAmplitude = amplitude / oscCount
       state.oscillators[oscIndex].amplitude = amplitude
       state.amplitude += scaledAmplitude
@@ -183,7 +198,7 @@ export function main(runAnalysis = false): AudioAPI {
       // Coefficients
       const coefPhaseFlicker = math.rand(0.5, 2)
       const coefPhase = (Math.PI * uniqueTime) / coefSurgeIntervalSeconds + (coefPhaseFlicker * oscIndex) / oscCount
-      const coefIntensity = Math.cos(coefPhase) ** 20
+      const coefIntensity = inputs.effects.doFlicker * Math.cos(coefPhase) ** 20
       const scaledCoefIntensity = coefIntensity * coefMaxIntensity
       state.oscillators[oscIndex].flicker = amplitude * coefIntensity
       state.flicker += (amplitude * coefIntensity) / oscCount
@@ -197,21 +212,23 @@ export function main(runAnalysis = false): AudioAPI {
     const colFlicker = math.rand(-0.2, 0.2)
     const colPulse = Math.round((1.7 * uniqueTime + colFlicker) % 1) * Number((uniqueTime + colFlicker) % 7 < 1.5)
 
-    // Each collectable — disabled until we sync
-    if (col) {
+    // Each collectable
+    // TODO: consider the .type property!
+    if (inputs.pois[0]) {
       const colNote = Math.round(uniqueTime % 4)
-      const colFreq = (transRootFreq * getNoteInScale(currentChord, colNote)) / 2
+      const colFreq = transRootFreq * getNoteInScale(currentChord, colNote) * 2
       setValue(col.node.frequency, colFreq)
       setValue(col.node.detune, detune)
-      setValue(col.pan.pan, 0) // Should be based on POI direction
-      const colCollected = false // Should be based on POI collected
+      setValue(col.pan.pan, math.renormalized(inputs.pois[0].direction, -90, 90, -1, 1))
+      const colCollected = inputs.pois[0].collected
       const colSteady = math.clip(math.normalized(state.amplitude, 0, 0.3))
-      const colGainPulse = colCollected ? colSteady : colPulse
-      // Should be based on POI distance
+      const colGainPulse = colCollected ? colSteady : colPulse / Math.max(1, inputs.pois[0].distance)
       const colAmplitude = stateAmpInverse * colGainPulse * 0.2
       setValue(col.gain.gain, colAmplitude)
       state.pois[0].amplitude = colGainPulse
       state.pois[0].note = colNote / 4
+    } else {
+      setValue(col.gain.gain, 0)
     }
   }
 
