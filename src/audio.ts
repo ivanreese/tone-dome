@@ -1,6 +1,6 @@
 import * as math from "./math"
 
-const fftSize = 32768 / 32
+const fftSize = 32768
 
 export let context: AudioContext
 export let sampleRate: number
@@ -47,7 +47,7 @@ export function setupAudio(runAnalysis: boolean) {
   hardCompressor.release.value = 0.01
   hardCompressor.threshold.value = -8
 
-  output.gain.value = 0.2
+  output.gain.value = 1
 
   // input -> heavy -> reverb -> light -> soft -> hard -> output
 
@@ -60,7 +60,7 @@ export function setupAudio(runAnalysis: boolean) {
     output.connect(analyser)
   }
 
-  return { lightDistortion, heavyDistortion, reverb, softCompressor, hardCompressor }
+  return { heavyDistortion }
 }
 
 function makeReverb(seconds: number, decay: number, reverse: boolean) {
@@ -76,7 +76,8 @@ function makeReverb(seconds: number, decay: number, reverse: boolean) {
 
   for (let i = 0; i < steps; i++) {
     const n = reverse ? steps - i : i
-    impulseL[i] = impulseR[i] = math.rand(-1, 1) * (1 - n / steps) ** decay
+    impulseL[i] = math.rand(-1, 1) * (1 - n / steps) ** decay
+    impulseR[i] = math.rand(-1, 1) * (1 - n / steps) ** decay
   }
 
   convolver.buffer = impulse
