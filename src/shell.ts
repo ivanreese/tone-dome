@@ -38,18 +38,25 @@ async function init() {
       drawSpectrum(audioAPI.state)
       // drawMouse()
 
-      addCircle("orientation", 0, 0, orientation.y / 90)
-      addCircle("amplitude", 0, 1, audioAPI.state.amplitude)
-      addCircle("chord", 0, 2, audioAPI.state.chord)
-      addCircle("chorus", 0, 3, audioAPI.state.chorus)
-      addCircle("distortion", 0, 4, audioAPI.state.distortion)
-      addCircle("flicker", 0, 5, audioAPI.state.flicker)
-      addCircle("transposition", 0, 6, audioAPI.state.transposition)
-
       audioAPI.state.oscillators.forEach((osc, oscIndex) => {
         addCircle(`osc ${oscIndex} amp`, 1, oscIndex, osc.amplitude)
         addCircle(`osc ${oscIndex} flicker`, 2, oscIndex, osc.flicker)
       })
+
+      audioAPI.state.pois.forEach((poi, poiIndex) => {
+        addCircle(`poi ${poiIndex} amp`, 3, poiIndex, poi.amplitude)
+        addCircle(`poi ${poiIndex} note`, 4, poiIndex, poi.note)
+      })
+
+      addCircle("orientation", 0, 0, orientation.y / 90)
+      addCircle("active", 0, 1, audioAPI.state.active)
+      addCircle("amplitude", 0, 2, audioAPI.state.amplitude)
+      addCircle("chord", 0, 3, audioAPI.state.chord)
+      addCircle("detune", 0, 5, audioAPI.state.detune)
+      addCircle("distortion", 0, 6, audioAPI.state.distortion)
+      addCircle("flicker", 0, 7, audioAPI.state.flicker)
+      addCircle("transposition", 0, 8, audioAPI.state.transposition)
+      addCircle("chorus", 0, 4, audioAPI.state.chorus) // Chorus goes on top :)
     }
 
     requestAnimationFrame(tick)
