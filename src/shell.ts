@@ -16,25 +16,15 @@ const orientation = { x: 0, y: 0, z: 0 }
 
 const inputs = {
   orientation: { x: 0, y: 0, z: 0 },
-  pois: [
-    {
-      lat: 0,
-      lon: 0,
-      collected: false,
-      type: 0,
-      distance: Infinity,
-      direction: 0,
-    },
-  ],
+  oscillators: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  flickers: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   effects: {
     blorpAtMs: 0,
     maxActive: 4,
-    maxChords: 1,
     doDetune: 0,
     doDistortion: 0,
     doFlicker: 0,
-    doTransposition: 0,
-    doDomeMode: 1,
+    doExtraNotes: 0,
   },
 }
 
