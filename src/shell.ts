@@ -11,10 +11,13 @@ let height = window.innerHeight
 
 const mouse = { x: 0, y: 0, down: false }
 
+const O = 1
+const F = 1
+
 const inputs = {
   orientation: { x: 0, y: 0, z: 0 },
-  oscillators: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-  flickers: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  oscillators: [O, O, O, O, O, O, O, O, O, O, O, O],
+  flickers: [F, F, F, F, F, F, F, F, F, F, F, F],
   effects: {
     blorpAtMs: -100000,
     detuneAtMs: -100000,
@@ -82,19 +85,19 @@ function drawCircles(state: AudioState, ms: number) {
     addCircle(`osc ${i} flicker`, 2, i, osc.flicker, f, () => (inputs.flickers[i] = f == 1 ? 0 : 1))
   })
 
-  state.pois.forEach((poi, poiIndex) => {
-    addCircle(`poi ${poiIndex} amp`, 3, poiIndex, poi.amplitude, 0)
-    addCircle(`poi ${poiIndex} note`, 4, poiIndex, poi.note, 0)
-  })
+  const fx = inputs.effects
+  addCircle("active", 0, 0, state.active, -1)
+  addCircle("amplitude", 0, 1, state.amplitude, -1)
+  addCircle("chord", 0, 2, state.chord, -1)
+  addCircle("flicker", 0, 3, state.flicker, -1, () => {})
+  addCircle("transposition", 0, 4, state.transposition, -1, () => {})
 
-  addCircle("active", 0, 1, state.active, -1)
-  addCircle("amplitude", 0, 2, state.amplitude, -1)
-  addCircle("chord", 0, 3, state.chord, -1)
-  addCircle("chorus", 0, 4, state.chorus, state.chorus, () => (inputs.effects.blorpAtMs = ms))
-  addCircle("detune", 0, 5, state.detune, state.detune, () => (inputs.effects.detuneAtMs = ms))
-  addCircle("distortion", 0, 6, state.distortion, state.distortion, () => (inputs.effects.distortAtMs = ms))
-  addCircle("flicker", 0, 7, state.flicker, -1, () => {})
-  addCircle("transposition", 0, 8, state.transposition, -1, () => {})
+  addCircle("chorus", 0, 6, state.chorus, state.chorus, () => (fx.blorpAtMs = ms))
+  addCircle("detune", 0, 7, state.detune, state.detune, () => (fx.detuneAtMs = ms))
+  addCircle("distortion", 0, 8, state.distortion, state.distortion, () => (fx.distortAtMs = ms))
+  addCircle("bass", 0, 9, state.bass.amplitude, fx.doExtraBass, () => (fx.doExtraBass = fx.doExtraBass == 0 ? 1 : 0))
+  addCircle("melody", 0, 10, state.melody.amplitude, fx.doExtraMelody, () => (fx.doExtraMelody = fx.doExtraMelody == 0 ? 1 : 0))
+  addCircle("extra", 0, 11, 0, fx.doExtraNotes, () => (fx.doExtraNotes = fx.doExtraNotes == 0 ? 1 : 0))
 }
 
 function addCircle(name: string, x: number, y: number, size: number, color: number, cb?: Function) {

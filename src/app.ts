@@ -99,10 +99,14 @@ export type AudioState = {
     amplitude: number //// 0 to 1 • loudness of the oscillator (pre-reverb, so doesn't match exactly)
     flicker: number ////// 0 to 1 • amount of flickering high-frequency sound in this oscillator
   }>
-  pois: Array<{
-    amplitude: number //// 0 to 1 • loudness of the POI (pre-reverb, so doesn't match exactly)
-    note: number ///////// 0 to 1 • which part of the current chord/scale is this POI playing
-  }>
+  melody: {
+    amplitude: number //// 0 to 1 • loudness of the melody (pre-reverb, so doesn't match exactly)
+    note: number ///////// 0 to 1 • which part of the current chord/scale is the melody playing
+  }
+  bass: {
+    amplitude: number //// 0 to 1 • loudness of the bass (pre-reverb, so doesn't match exactly)
+    note: number ///////// 0 to 1 • which part of the current chord/scale is the bass playing
+  }
 }
 
 export type AudioAPI = { tick: AudioTick; state: AudioState }
@@ -113,12 +117,25 @@ export function main(runAnalysis = false): AudioAPI {
 
   // Make some oscillators
   const oscs = makeOscs(oscCount)
-  const col = makeCollectable()
+  const bass = makePlayer("square")
+  const melody = makePlayer("sawtooth")
 
   const stateOscillators = Array.from({ length: oscCount }, () => ({ amplitude: 0, flicker: 0 }))
-  const statePois = [{ amplitude: 0, note: 0 }]
-
-  const state: AudioState = { active: 0, amplitude: 0, chord: 0, chorus: 0, detune: 0, distortion: 0, flicker: 0, transposition: 0, oscillators: stateOscillators, pois: statePois }
+  const stateMelody = { amplitude: 0, note: 0 }
+  const stateBass = { amplitude: 0, note: 0 }
+  const state: AudioState = {
+    active: 0,
+    amplitude: 0,
+    chord: 0,
+    chorus: 0,
+    detune: 0,
+    distortion: 0,
+    flicker: 0,
+    transposition: 0,
+    oscillators: stateOscillators,
+    melody: stateMelody,
+    bass: stateBass,
+  }
 
   function tick(ms: number, inputs: AudioInputs) {
     const uniqueTime = ms / 1000
@@ -217,28 +234,31 @@ export function main(runAnalysis = false): AudioAPI {
       setValue(osc.gainHigh.gain, inputs.flickers[oscIndex] * scaledAmplitude * scaledCoefIntensity)
     })
 
-    // Collectables
-    const stateAmpInverse = math.denormalized(math.clip(math.normalized(state.amplitude, 0, 0.3)), 1, 0.1)
-    const colFlicker = math.rand(-0.2, 0.2)
-    const colPulse = Math.round((1.7 * uniqueTime + colFlicker) % 1) * Number((uniqueTime + colFlicker) % 7 < 1.5)
+    // Extras
+    const bassNoteCount = 4
+    const bassNote = Math.round((uniqueTime / 3) % bassNoteCount)
+    const bassFreq = (transRootFreq * getNoteInScale(currentChord, bassNote)) / 3
+    setValue(bass.node.frequency, bassFreq)
+    setValue(bass.node.detune, detune)
+    setValue(bass.pan.pan, Math.sin(uniqueTime / 2) * 0.2)
+    const bassAmplitude = math.impulse(state.amplitude * 2)
+    const bassAmplitudeScaled = inputs.effects.doExtraBass * bassAmplitude * 0.05
+    setValue(bass.gain.gain, bassAmplitudeScaled)
+    state.bass.amplitude = bassAmplitude
+    state.bass.note = bassNote / bassNoteCount
 
-    // TODO Add a melody
-    if (inputs.effects.doExtraBass) {
-      const colNote = Math.round(uniqueTime % 4)
-      const colFreq = transRootFreq * getNoteInScale(currentChord, colNote) * 2
-      setValue(col.node.frequency, colFreq)
-      setValue(col.node.detune, detune)
-      setValue(col.pan.pan, math.renormalized(0, -90, 90, -1, 1))
-      const colCollected = true
-      const colSteady = math.clip(math.normalized(state.amplitude, 0, 0.3))
-      const colGainPulse = colCollected ? colSteady : colPulse
-      const colAmplitude = stateAmpInverse * colGainPulse * 0.2
-      setValue(col.gain.gain, colAmplitude)
-      state.pois[0].amplitude = colGainPulse
-      state.pois[0].note = colNote / 4
-    } else {
-      setValue(col.gain.gain, 0)
-    }
+    const melodyNoteCount = 4
+    const melodyNoteOffset = 3
+    const melodyNote = melodyNoteOffset + (Math.round((uniqueTime + math.rand(-0.1, 0.1)) / 2) % melodyNoteCount)
+    const melodyFreq = transRootFreq * getNoteInScale(currentChord, melodyNote)
+    setValue(melody.node.frequency, melodyFreq)
+    setValue(melody.node.detune, detune)
+    setValue(melody.pan.pan, Math.sin(uniqueTime / 2) * 0.2)
+    const melodyAmplitude = math.impulse(state.amplitude * 2)
+    const melodyAmplitudeScaled = inputs.effects.doExtraMelody * melodyAmplitude * 0.05
+    setValue(melody.gain.gain, melodyAmplitudeScaled)
+    state.melody.amplitude = melodyAmplitude
+    state.melody.note = melodyNote / melodyNoteCount
   }
 
   return { tick, state }
@@ -296,8 +316,8 @@ function makeOscs(count) {
   })
 }
 
-function makeCollectable() {
-  const node = new OscillatorNode(audio.context, { type: "sawtooth" })
+function makePlayer(type) {
+  const node = new OscillatorNode(audio.context, { type })
   const pan = new StereoPannerNode(audio.context)
   const gain = new GainNode(audio.context)
   node.connect(gain).connect(pan).connect(audio.input)

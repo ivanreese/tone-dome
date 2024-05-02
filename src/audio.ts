@@ -1,6 +1,6 @@
 import * as math from "./math"
 
-const fftSize = 32768
+const fftSize = window.innerWidth < 500 ? 256 : 32768
 
 export let context: AudioContext
 export let sampleRate: number
