@@ -12,7 +12,8 @@ export function setupAudio(runAnalysis: boolean) {
   context = new window.AudioContext()
   sampleRate = context.sampleRate
 
-  input = new GainNode(context, { gain: 1 })
+  input = new GainNode(context, { gain: 0 })
+  input.gain.linearRampToValueAtTime(1, context.currentTime + 10)
 
   if (runAnalysis) {
     analyser = context.createAnalyser()
