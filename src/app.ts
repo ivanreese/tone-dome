@@ -1,6 +1,9 @@
 import * as audio from "./audio"
 import * as math from "./math"
 
+// This determines how often this device pulses when doing pulsing
+const pulseEveryNth = math.randInt(1, 5)
+
 // How many different oscillators do we want?
 // They each independently cycle their amplitudes, wave coefficients, etc
 // They each get a successive note in the current chord/scale
@@ -30,6 +33,7 @@ const transpositionIntervalSeconds = 37 // Global
 const detuneCycleSeconds = 7 // Global
 const detuneIntensity = 3000
 const detuneDuration = 10
+const melodyDetuneCycleSeconds = 33
 
 // Every so often, surge the heavy distortion
 const distortionIntervalSeconds = 129 // Unique
@@ -39,6 +43,11 @@ const distortionDuration = 12
 const blorpIntervalSeconds = 47 // Unique
 const blorpDuration = 2
 const blorpIntensity = 1000
+
+// Cycle osc types
+const bassTypeInterval = 34
+const melodyTypeInterval = 17
+const oscTypes = ["sawtooth", "square", "triangle"]
 
 // We treat C as our root frequency
 const rootFrequency = 130.813
@@ -93,6 +102,7 @@ export type AudioState = {
   chorus: number ///////// 0 to 1 • surges up toward infinity whenever a "blorp" happens
   detune: number ///////// 0 to 1 • the pitch continually drifts up and down
   distortion: number ///// 0 to 1 • surges when the sound gets heavily fuzzed out (once every ~2 minutes)
+  pulse: number ////////// 0 to 1 • indicates whether the notes are pulsing because doExtraNotes
   flicker: number //////// 0 to 1 • overall amount of flickering high-frequency sound in this oscillator
   transposition: number // 0 to 1 • sweeps up and down as the pitch changes (once every ~30 seconds)
   oscillators: Array<{
@@ -117,8 +127,8 @@ export function main(runAnalysis = false): AudioAPI {
 
   // Make some oscillators
   const oscs = makeOscs(oscCount)
-  const bass = makePlayer("square")
-  const melody = makePlayer("sawtooth")
+  const bass = makePlayer()
+  const melody = makePlayer()
 
   const stateOscillators = Array.from({ length: oscCount }, () => ({ amplitude: 0, flicker: 0 }))
   const stateMelody = { amplitude: 0, note: 0 }
@@ -131,6 +141,7 @@ export function main(runAnalysis = false): AudioAPI {
     detune: 0,
     distortion: 0,
     flicker: 0,
+    pulse: 0,
     transposition: 0,
     oscillators: stateOscillators,
     melody: stateMelody,
@@ -151,7 +162,7 @@ export function main(runAnalysis = false): AudioAPI {
     state.transposition = Math.abs(curvedT)
 
     // Chord
-    const chord = Math.round(globalTime / chordChangeIntervalSeconds)
+    const chord = Math.floor(globalTime / chordChangeIntervalSeconds)
     const chordIndex = chord % chordProgression.length
     const currentChord = chordProgression[chordIndex]
     state.chord = chordIndex / chordProgression.length
@@ -190,6 +201,14 @@ export function main(runAnalysis = false): AudioAPI {
     setValue(fx.heavyDistortion.dry, 1 - distortion)
     state.distortion = distortion
 
+    // Amplitude
+    const amplitudePulse = inputs.effects.doExtraNotes * math.impulse(globalTime % pulseEveryNth)
+    state.pulse = amplitudePulse
+    const amplitudePulseScaled = amplitudePulse * 0.2
+    const amplitudeChorus = 0.5 * chorus
+    const amplitudeDetune = 0.4 * Math.abs(detune)
+    const amplitudeDistort = 0.1 * distortion
+
     // These state values are accumulated as we loop the oscillators
     state.amplitude = 0
     state.flicker = 0
@@ -211,11 +230,7 @@ export function main(runAnalysis = false): AudioAPI {
       // Amplitude
       const amplitudePhase = Math.PI * osc.rand + uniqueTime
       const amplitudeActiveModulated = activeAmplitude * Math.sin(amplitudePhase) ** 20
-      const amplitudeDomeMode = inputs.effects.doExtraNotes * math.impulse(amplitudePhase % 4)
-      const amplitudeChorus = 0.5 * chorus
-      const amplitudeDetune = 0.4 * Math.abs(detune)
-      const amplitudeDistort = 0.1 * distortion
-      const amplitude = Math.min(1, amplitudeActiveModulated + amplitudeDomeMode + amplitudeChorus + amplitudeDetune + amplitudeDistort)
+      const amplitude = Math.min(1, amplitudeActiveModulated + amplitudePulseScaled + amplitudeChorus + amplitudeDetune + amplitudeDistort)
       const scaledAmplitude = amplitude / oscCount
       state.oscillators[oscIndex].amplitude = amplitude
       state.amplitude += scaledAmplitude
@@ -236,29 +251,39 @@ export function main(runAnalysis = false): AudioAPI {
 
     // Extras
     const bassNoteCount = 4
-    const bassNote = Math.round((uniqueTime / 3) % bassNoteCount)
+    const bassNote = Math.floor((uniqueTime / 2) % bassNoteCount)
     const bassFreq = (transRootFreq * getNoteInScale(currentChord, bassNote)) / 3
-    setValue(bass.node.frequency, bassFreq)
-    setValue(bass.node.detune, detune)
+    setValue(bass.node1.frequency, bassFreq)
+    setValue(bass.node2.frequency, bassFreq)
     setValue(bass.pan.pan, Math.sin(uniqueTime / 2) * 0.2)
     const bassAmplitude = math.impulse(state.amplitude * 2)
-    const bassAmplitudeScaled = inputs.effects.doExtraBass * bassAmplitude * 0.05
+    const bassAmplitudeScaled = inputs.effects.doExtraBass * bassAmplitude * 0.03
     setValue(bass.gain.gain, bassAmplitudeScaled)
     state.bass.amplitude = bassAmplitude
     state.bass.note = bassNote / bassNoteCount
+    bass.node1.type = math.arrMod(oscTypes, Math.floor(uniqueTime / bassTypeInterval))
+    bass.node2.type = math.arrMod(oscTypes, Math.floor(uniqueTime / bassTypeInterval))
+    setValue(bass.node1.detune, detune * detuneIntensity)
+    setValue(bass.node2.detune, detune * detuneIntensity)
 
     const melodyNoteCount = 4
     const melodyNoteOffset = 3
-    const melodyNote = melodyNoteOffset + (Math.round((uniqueTime + math.rand(-0.1, 0.1)) / 2) % melodyNoteCount)
+    const melodyTime = uniqueTime * math.arrMod(diatonic, Math.round(uniqueTime))
+    const melodyNote = melodyNoteOffset + (Math.floor((uniqueTime + math.rand(-0.2, 0.2)) / 2) % melodyNoteCount)
     const melodyFreq = transRootFreq * getNoteInScale(currentChord, melodyNote)
-    setValue(melody.node.frequency, melodyFreq)
-    setValue(melody.node.detune, detune)
+    setValue(melody.node1.frequency, melodyFreq)
+    setValue(melody.node2.frequency, melodyFreq)
     setValue(melody.pan.pan, Math.sin(uniqueTime / 2) * 0.2)
     const melodyAmplitude = math.impulse(state.amplitude * 2)
-    const melodyAmplitudeScaled = inputs.effects.doExtraMelody * melodyAmplitude * 0.05
+    const melodyAmplitudeScaled = inputs.effects.doExtraMelody * melodyAmplitude * 0.03
     setValue(melody.gain.gain, melodyAmplitudeScaled)
     state.melody.amplitude = melodyAmplitude
     state.melody.note = melodyNote / melodyNoteCount
+    melody.node1.type = math.arrMod(oscTypes, Math.floor(uniqueTime / melodyTypeInterval))
+    melody.node2.type = math.arrMod(oscTypes, Math.floor(uniqueTime / melodyTypeInterval))
+    const melodyDetune = 20 * Math.sin((Math.PI * uniqueTime) / melodyDetuneCycleSeconds) ** 4
+    setValue(melody.node1.detune, detune * detuneIntensity + melodyDetune)
+    setValue(melody.node2.detune, detune * detuneIntensity - melodyDetune)
   }
 
   return { tick, state }
@@ -316,11 +341,15 @@ function makeOscs(count) {
   })
 }
 
-function makePlayer(type) {
-  const node = new OscillatorNode(audio.context, { type })
+function makePlayer() {
+  const node1 = new OscillatorNode(audio.context)
+  const node2 = new OscillatorNode(audio.context)
   const pan = new StereoPannerNode(audio.context)
   const gain = new GainNode(audio.context)
-  node.connect(gain).connect(pan).connect(audio.input)
-  node.start()
-  return { node, pan, gain }
+  node1.connect(gain)
+  node2.connect(gain)
+  gain.connect(pan).connect(audio.input)
+  node1.start()
+  node2.start()
+  return { node1, node2, pan, gain }
 }
