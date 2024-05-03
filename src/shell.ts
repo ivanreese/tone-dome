@@ -11,20 +11,17 @@ let height = window.innerHeight
 
 const mouse = { x: 0, y: 0, down: false }
 
-const O = 1
-const F = 1
-
 const inputs = {
   orientation: { x: 0, y: 0, z: 0 },
-  oscillators: [O, O, O, O, O, O, O, O, O, O, O, O],
-  flickers: [F, F, F, F, F, F, F, F, F, F, F, F],
+  oscillators: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  flickers: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   effects: {
     blorpAtMs: -100000,
     detuneAtMs: -100000,
     distortAtMs: -100000,
-    doExtraBass: 1,
-    doExtraMelody: 1,
-    doExtraNotes: 1,
+    doBass: 0,
+    doMelody: 0,
+    doPulse: 0,
   },
 }
 
@@ -95,9 +92,9 @@ function drawCircles(state: AudioState, ms: number) {
   addCircle("chorus", 0, 6, state.chorus, state.chorus, () => (fx.blorpAtMs = ms))
   addCircle("detune", 0, 7, state.detune, state.detune, () => (fx.detuneAtMs = ms))
   addCircle("distortion", 0, 8, state.distortion, state.distortion, () => (fx.distortAtMs = ms))
-  addCircle("bass", 0, 9, state.bass.amplitude, fx.doExtraBass, () => (fx.doExtraBass = fx.doExtraBass == 0 ? 1 : 0))
-  addCircle("melody", 0, 10, state.melody.amplitude, fx.doExtraMelody, () => (fx.doExtraMelody = fx.doExtraMelody == 0 ? 1 : 0))
-  addCircle("extra", 0, 11, state.pulse, fx.doExtraNotes, () => (fx.doExtraNotes = fx.doExtraNotes == 0 ? 1 : 0))
+  addCircle("bass", 0, 9, state.bass.amplitude, fx.doBass, () => (fx.doBass = fx.doBass == 0 ? 1 : 0))
+  addCircle("melody", 0, 10, state.melody.amplitude, fx.doMelody, () => (fx.doMelody = fx.doMelody == 0 ? 1 : 0))
+  addCircle("pulse", 0, 11, state.pulse, fx.doPulse, () => (fx.doPulse = fx.doPulse == 0 ? 1 : 0))
 }
 
 function addCircle(name: string, x: number, y: number, size: number, color: number, cb?: Function) {
