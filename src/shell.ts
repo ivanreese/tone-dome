@@ -13,8 +13,8 @@ const mouse = { x: 0, y: 0, down: false }
 
 const inputs = {
   orientation: { x: 0, y: 0, z: 0 },
-  oscillators: [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  flickers: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  oscillators: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+  flickers: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
   effects: {
     blorpAtMs: -100000,
     detuneAtMs: -100000,

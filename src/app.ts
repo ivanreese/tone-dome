@@ -41,8 +41,8 @@ const distortionDuration = 12
 
 // Every so often, blorp
 const blorpIntervalSeconds = 47 // Unique
-const blorpDuration = 2
-const blorpIntensity = 1000
+const blorpDuration = 1
+const blorpIntensity = 500
 
 // Cycle osc types
 const bassTypeInterval = 34
